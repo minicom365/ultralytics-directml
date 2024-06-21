@@ -333,7 +333,8 @@ class ProfileModels:
         self.imgsz = imgsz
         self.half = half
         self.trt = trt  # run TensorRT profiling
-        self.device = device or torch.device(0 if torch.cuda.is_available() else "cpu")
+        # dml_patch
+        self.device = device or torch.device(0 if torch.cuda.is_available() or hasattr(torch, 'dml') else "cpu")
 
     def profile(self):
         """Logs the benchmarking results of a model, checks metrics against floor and returns the results."""
@@ -515,7 +516,8 @@ class ProfileModels:
     @staticmethod
     def print_table(table_rows):
         """Formats and prints a comparison table for different models with given statistics and performance data."""
-        gpu = torch.cuda.get_device_name(0) if torch.cuda.is_available() else "GPU"
+        # dml_patch
+        gpu = torch.cuda.get_device_name(0) if torch.cuda.is_available() or hasattr(torch, 'dml') else "GPU"
         header = (
             f"| Model | size<br><sup>(pixels) | mAP<sup>val<br>50-95 | Speed<br><sup>CPU ONNX<br>(ms) | "
             f"Speed<br><sup>{gpu} TensorRT<br>(ms) | params<br><sup>(M) | FLOPs<br><sup>(B) |"

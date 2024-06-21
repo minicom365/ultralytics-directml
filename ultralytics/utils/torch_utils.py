@@ -60,7 +60,10 @@ def smart_inference_mode():
         if TORCH_1_9 and torch.is_inference_mode_enabled():
             return fn  # already in inference_mode, act as a pass-through
         else:
-            return (torch.inference_mode if TORCH_1_9 else torch.no_grad)()(fn)
+            if hasattr(torch, 'dml'):
+                return (torch.inference_mode if TORCH_1_9 else torch.no_grad)(mode=False)(fn)  # dml_patch
+            else:
+                return (torch.inference_mode if TORCH_1_9 else torch.no_grad)()(fn)  # dml_patch
 
     return decorate
 
@@ -117,15 +120,17 @@ def select_device(device="", batch=0, newline=False, verbose=True):
     for remove in "cuda:", "none", "(", ")", "[", "]", "'", " ":
         device = device.replace(remove, "")  # to string, 'cuda:0' -> '0' and '(0, 1)' -> '0,1'
     cpu = device == "cpu"
+    dml = device == "dml"  # dml_patch
     mps = device in {"mps", "mps:0"}  # Apple Metal Performance Shaders (MPS)
-    if cpu or mps:
+    if cpu or mps or dml:  # dml_patch
         os.environ["CUDA_VISIBLE_DEVICES"] = "-1"  # force torch.cuda.is_available() = False
     elif device:  # non-cpu device requested
         if device == "cuda":
             device = "0"
         visible = os.environ.get("CUDA_VISIBLE_DEVICES", None)
         os.environ["CUDA_VISIBLE_DEVICES"] = device  # set environment variable - must be before assert is_available()
-        if not (torch.cuda.is_available() and torch.cuda.device_count() >= len(device.split(","))):
+        # dml_patch
+        if not ((torch.cuda.is_available() or hasattr(torch, 'dml')) and torch.cuda.device_count() >= len(device.split(","))):
             LOGGER.info(s)
             install = (
                 "See https://pytorch.org/get-started/locally/ for up-to-date torch install instructions if no "
@@ -142,8 +147,9 @@ def select_device(device="", batch=0, newline=False, verbose=True):
                 f"\nos.environ['CUDA_VISIBLE_DEVICES']: {visible}\n"
                 f"{install}"
             )
-
-    if not cpu and not mps and torch.cuda.is_available():  # prefer GPU if available
+    # dml_patch
+    if not cpu and not mps and not dml and (
+            torch.cuda.is_available() or hasattr(torch, 'dml')):  # prefer GPU if available #dml_patch
         devices = device.split(",") if device else "0"  # range(torch.cuda.device_count())  # i.e. 0,1,6,7
         n = len(devices)  # device count
         if n > 1:  # multi-GPU
@@ -161,7 +167,8 @@ def select_device(device="", batch=0, newline=False, verbose=True):
         for i, d in enumerate(devices):
             p = torch.cuda.get_device_properties(i)
             s += f"{'' if i == 0 else space}CUDA:{d} ({p.name}, {p.total_memory / (1 << 20):.0f}MiB)\n"  # bytes to MB
-        arg = "cuda:0"
+        # dml_patch
+        arg = "cuda:0" if not hasattr(torch, 'dml') else f"privateuseone:{device if len(devices) == 1 else '0'}"
     elif mps and TORCH_2_0 and torch.backends.mps.is_available():
         # Prefer MPS if available
         s += f"MPS ({get_cpu_info()})\n"
@@ -172,12 +179,15 @@ def select_device(device="", batch=0, newline=False, verbose=True):
 
     if verbose:
         LOGGER.info(s if newline else s.rstrip())
+    if dml:  # dml_patch
+        import torch_directml  # dml_patch
+        return torch_directml.device()  # dml_patch
     return torch.device(arg)
 
 
 def time_sync():
     """PyTorch-accurate time."""
-    if torch.cuda.is_available():
+    if torch.cuda.is_available() or hasattr(torch, 'dml'):
         torch.cuda.synchronize()
     return time.time()
 
@@ -594,7 +604,8 @@ def profile(input, ops, n=10, device=None):
                         t[2] = float("nan")
                     tf += (t[1] - t[0]) * 1000 / n  # ms per op forward
                     tb += (t[2] - t[1]) * 1000 / n  # ms per op backward
-                mem = torch.cuda.memory_reserved() / 1e9 if torch.cuda.is_available() else 0  # (GB)
+                # dml_patch
+                mem = torch.cuda.memory_reserved() / 1e9 if torch.cuda.is_available() or hasattr(torch, 'dml') else 0  # (GB)
                 s_in, s_out = (tuple(x.shape) if isinstance(x, torch.Tensor) else "list" for x in (x, y))  # shapes
                 p = sum(x.numel() for x in m.parameters()) if isinstance(m, nn.Module) else 0  # parameters
                 LOGGER.info(f"{p:12}{flops:12.4g}{mem:>14.3f}{tf:14.4g}{tb:14.4g}{str(s_in):>24s}{str(s_out):>24s}")

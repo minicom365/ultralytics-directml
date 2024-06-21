@@ -167,7 +167,8 @@ class BaseTrainer:
             world_size = len(self.args.device.split(","))
         elif isinstance(self.args.device, (tuple, list)):  # i.e. device=[0, 1, 2, 3] (multi-GPU from CLI is list)
             world_size = len(self.args.device)
-        elif torch.cuda.is_available():  # i.e. device=None or device='' or device=number
+        # dml_patch
+        elif torch.cuda.is_available() or hasattr(torch, 'dml'):  # i.e. device=None or device='' or device=number
             world_size = 1  # default to device 0
         else:  # i.e. device='cpu' or 'mps'
             world_size = 0
@@ -399,7 +400,8 @@ class BaseTrainer:
                             break
 
                 # Log
-                mem = f"{torch.cuda.memory_reserved() / 1E9 if torch.cuda.is_available() else 0:.3g}G"  # (GB)
+                # dml_patch
+                mem = f"{torch.cuda.memory_reserved() / 1E9 if torch.cuda.is_available() or hasattr(torch, 'dml') else 0:.3g}G"  # (GB)
                 loss_len = self.tloss.shape[0] if len(self.tloss.shape) else 1
                 losses = self.tloss if loss_len > 1 else torch.unsqueeze(self.tloss, 0)
                 if RANK in {-1, 0}:

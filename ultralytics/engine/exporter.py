@@ -388,7 +388,9 @@ class Exporter:
         """YOLOv8 ONNX export."""
         requirements = ["onnx>=1.12.0"]
         if self.args.simplify:
-            requirements += ["onnxslim==0.1.28", "onnxruntime" + ("-gpu" if torch.cuda.is_available() else "")]
+            # dml_patch
+            requirements += ["onnxslim==0.1.28", "onnxruntime" +
+                             ("-gpu" if torch.cuda.is_available() or hasattr(torch, 'dml') else "")]
         check_requirements(requirements)
         import onnx  # noqa
 
@@ -812,7 +814,8 @@ class Exporter:
     @try_export
     def export_saved_model(self, prefix=colorstr("TensorFlow SavedModel:")):
         """YOLOv8 TensorFlow SavedModel export."""
-        cuda = torch.cuda.is_available()
+        # dml_patch
+        cuda = torch.cuda.is_available() or hasattr(torch, 'dml')
         try:
             import tensorflow as tf  # noqa
         except ImportError:
