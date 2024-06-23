@@ -129,7 +129,7 @@ class AutoBackend(nn.Module):
 
         # Set device
         # dml_patch
-        cuda = torch.cuda.is_available() or hasattr(torch, 'dml') and device.type != "cpu"  # use CUDA
+        cuda = (torch.cuda.is_available() or hasattr(torch, 'dml') and device.type != "cpu") or device.type == "privateuseone" # use CUDA
         if cuda and not any([nn_module, pt, jit, engine, onnx]):  # GPU dataloader formats
             device = torch.device("cpu")
             cuda = False

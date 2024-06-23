@@ -111,7 +111,7 @@ def benchmark(
                 assert not is_end2end, "End-to-end models not supported by NCNN yet"
             if "cpu" in device.type:
                 assert cpu, "inference not supported on CPU"
-            if "cuda" in device.type:
+            if "cuda" in device.type or "privateuseone" in device.type:
                 assert gpu, "inference not supported on GPU"
 
             # Export

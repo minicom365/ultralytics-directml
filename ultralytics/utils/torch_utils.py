@@ -59,11 +59,12 @@ def smart_inference_mode():
         """Applies appropriate torch decorator for inference mode based on torch version."""
         if TORCH_1_9 and torch.is_inference_mode_enabled():
             return fn  # already in inference_mode, act as a pass-through
-        else:
-            if hasattr(torch, 'dml'):
-                return (torch.inference_mode if TORCH_1_9 else torch.no_grad)(mode=False)(fn)  # dml_patch
+        else:  # dml_patch
+            import torch_directml
+            if hasattr(torch, 'directml') or torch_directml.is_available():
+                return (torch.inference_mode if TORCH_1_9 else torch.no_grad)(mode=False)(fn)
             else:
-                return (torch.inference_mode if TORCH_1_9 else torch.no_grad)()(fn)  # dml_patch
+                return (torch.inference_mode if TORCH_1_9 else torch.no_grad)()(fn)
 
     return decorate
 
@@ -168,7 +169,7 @@ def select_device(device="", batch=0, newline=False, verbose=True):
             p = torch.cuda.get_device_properties(i)
             s += f"{'' if i == 0 else space}CUDA:{d} ({p.name}, {p.total_memory / (1 << 20):.0f}MiB)\n"  # bytes to MB
         # dml_patch
-        arg = "cuda:0" if not hasattr(torch, 'dml') else f"privateuseone:{device if len(devices) == 1 else '0'}"
+        arg = "cuda:0" if not hasattr(torch, 'dml') else int(devices[0]) if len(devices) == 1 else torch_directml.default_device()
     elif mps and TORCH_2_0 and torch.backends.mps.is_available():
         # Prefer MPS if available
         s += f"MPS ({get_cpu_info()})\n"
@@ -181,7 +182,7 @@ def select_device(device="", batch=0, newline=False, verbose=True):
         LOGGER.info(s if newline else s.rstrip())
     if dml:  # dml_patch
         import torch_directml  # dml_patch
-        return torch_directml.device()  # dml_patch
+        return torch_directml.device(torch_directml.default_device())  # dml_patch
     return torch.device(arg)
 
 
